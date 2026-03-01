@@ -12,6 +12,8 @@ import ReviewResume from './pages/ReviewResume'
 import Community from './pages/Community'
 import { useAuth } from '@clerk/clerk-react'
 import {Toaster} from 'react-hot-toast'
+// Add import at top with other imports
+import CoverLetter from './pages/CoverLetter'
 const App = () => {
 
   
@@ -28,6 +30,8 @@ const App = () => {
           <Route path='remove-background' element={<RemoveBackground />} />
           <Route path='remove-object' element={<RemoveObject />} />
           <Route path='review-resume' element={<ReviewResume />} />
+          // Add route after review-resume route
+          <Route path='cover-letter' element={<CoverLetter />} />
           <Route path='community' element={<Community />} />
         </Route>
       </Routes>

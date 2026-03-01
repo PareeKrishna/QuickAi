@@ -528,3 +528,87 @@ export const resumeReview = async(req, res) => {
         });
     }
 }
+
+export const generateCoverLetter = async(req, res) => {
+    try {
+        const authObj = typeof req.auth === 'function' ? await req.auth() : req.auth;
+        const { userId } = authObj || {};
+        const { jobDescription, userSkills, tone } = req.body;
+        const plan = req.plan || 'free';
+
+        // Premium only feature
+        if (plan !== 'premium') {
+            return res.json({ success: false, message: "This feature is only available for premium subscribers" });
+        }
+
+        // Validate inputs
+        if (!jobDescription || !userSkills) {
+            return res.json({ success: false, message: "Job description and skills are required" });
+        }
+
+        const toneMap = {
+            professional: "formal, confident, and professional",
+            enthusiastic: "energetic, passionate, and enthusiastic",
+            concise: "brief, direct, and to the point"
+        };
+
+        const selectedTone = toneMap[tone] || toneMap['professional'];
+
+        const systemPrompt = `You are an expert career coach and professional cover letter writer.
+        You write highly personalized, ATS-optimized cover letters.
+        Your tone must be ${selectedTone}.
+        Structure the letter as:
+        1. Opening paragraph — hook + role mention
+        2. Middle paragraph 1 — match skills to job requirements
+        3. Middle paragraph 2 — specific value you bring
+        4. Closing paragraph — call to action
+
+        Rules:
+        - Do NOT use placeholder text like [Your Name] or [Date]
+        - Address it to "Hiring Manager" if no name is given
+        - Keep it between 250-350 words
+        - Make it sound human, not robotic
+        - Tailor content specifically to the job description provided`;
+
+        const userPrompt = `Write a cover letter for this job:
+
+        JOB DESCRIPTION:
+        ${jobDescription}
+
+        MY SKILLS AND EXPERIENCE:
+        ${userSkills}
+
+        TONE: ${selectedTone}`;
+
+        const response = await AI.chat.completions.create({
+            model: "gemini-2.5-flash",
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1024,
+        });
+
+        const rawContent = response?.choices?.[0]?.message?.content;
+        const content = Array.isArray(rawContent)
+            ? rawContent.map((p) => (typeof p === 'string' ? p : p?.text)).filter(Boolean).join('')
+            : (typeof rawContent === 'string' ? rawContent : '') || '';
+
+        if (!content.trim()) {
+            return res.json({ success: false, message: "AI returned empty response. Please try again." });
+        }
+
+        // Save to DB
+        await sql`INSERT INTO creations (user_id, prompt, content, type) 
+                  VALUES (${userId}, ${`Cover letter for: ${jobDescription.substring(0, 100)}...`}, ${content}, 'cover-letter')`;
+
+        res.json({ success: true, content });
+
+    } catch (error) {
+        console.error("DEBUG ERROR:", error.message);
+        console.error("Full error:", error);
+        const errorMessage = error.response?.data?.error?.message || error.message || "AI service error";
+        res.json({ success: false, message: errorMessage });
+    }
+}
